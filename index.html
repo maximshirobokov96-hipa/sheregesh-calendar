@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Календарь Шерегеш</title>
-    <!-- Подключение Telegram Web App -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
@@ -87,7 +86,6 @@
         .day.red-date { background-color: var(--red); color: white; font-weight: bold; }
         .day.default { background-color: rgba(150, 150, 150, 0.1); color: var(--text-color); }
 
-        /* Пульсация при клике */
         .day:active { transform: scale(0.9); transition: transform 0.1s; }
 
         .day.has-event::after {
@@ -95,7 +93,7 @@
             background-color: var(--red); border-radius: 50%; border: 1px solid white;
         }
 
-        /* Модальное окно (вместо тултипа для мобилок) */
+        /* Модальное окно */
         #modal {
             position: fixed; bottom: -100%; left: 0; right: 0;
             background: var(--card-bg); color: var(--text-color);
@@ -117,6 +115,7 @@
         .badge-pink { background: var(--pink); }
         .badge-yellow { background: var(--yellow); }
         .badge-green { background: var(--green); color: white; }
+        .badge-gray { background: rgba(150, 150, 150, 0.2); color: var(--hint-color); }
 
         .desc-text { font-size: 0.9rem; line-height: 1.4; color: var(--hint-color); margin-bottom: 15px; }
         
@@ -143,7 +142,6 @@
 
     <div class="months-container" id="calendar-container"></div>
 
-    <!-- Модальное окно для мобильных устройств -->
     <div id="modal">
         <div class="modal-header">
             <div class="modal-title" id="modal-title">Дата</div>
@@ -153,11 +151,9 @@
     </div>
 
     <script>
-        // Инициализация Telegram Web App
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Развернуть на весь экран
-        tg.ready();  // Сообщить Telegram, что приложение готово
-        // Установить цвет хедера (опционально)
+        tg.expand(); 
+        tg.ready();  
         tg.setHeaderColor('secondary_bg_color');
 
         const seasons = [
@@ -204,7 +200,24 @@
         }
 
         function getDateInfo(dateStr) {
-            if (disabledDates.includes(dateStr)) return { type: 'disabled', label: 'Нет мест', desc: 'Все места выкуплены.', isEvent: false };
+            // Новое правило: если нет мест с 14.11 по 31.03 - это Высокий сезон
+            if (disabledDates.includes(dateStr)) {
+                if (dateStr >= '2026-11-14' && dateStr <= '2027-03-31') {
+                    return { 
+                        type: 'high', 
+                        label: 'Высокий сезон (Мест нет)', 
+                        desc: 'Все места выкуплены. Свидетельствует о максимальном спросе и загрузке курорта в этот период.',
+                        isEvent: false 
+                    };
+                } else {
+                    return { 
+                        type: 'disabled', 
+                        label: 'Нет мест', 
+                        desc: 'Бронирование закрыто или все места выкуплены.', 
+                        isEvent: false 
+                    };
+                }
+            }
             
             let season = { type: 'default', label: 'Нет данных', desc: 'Стандартный день' };
             for (let s of seasons) {
@@ -228,7 +241,6 @@
         const modalTitle = document.getElementById('modal-title');
         const modalContent = document.getElementById('modal-content');
 
-        // Генерация календаря
         monthsToShow.forEach(m => {
             const monthDiv = document.createElement('div');
             monthDiv.className = 'month';
@@ -248,7 +260,9 @@
                 const info = getDateInfo(dateStr);
 
                 const dayDiv = document.createElement('div');
-                dayDiv.className = `day ${info.type} ${info.isEvent ? 'has-event' : ''}`;
+                // Если тип high, но дата в disabledDates - оставляем визуально зачеркнутой
+                const isDisabled = disabledDates.includes(dateStr);
+                dayDiv.className = `day ${info.type} ${info.isEvent ? 'has-event' : ''} ${isDisabled ? 'disabled' : ''}`;
                 dayDiv.textContent = d;
 
                 dayDiv.addEventListener('click', () => {
@@ -258,6 +272,7 @@
                     if (info.type === 'red-date') seasonBadgeClass = 'badge-red';
                     if (info.type === 'high') seasonBadgeClass = 'badge-pink';
                     if (info.type === 'low') seasonBadgeClass = 'badge-green';
+                    if (info.type === 'disabled') seasonBadgeClass = 'badge-gray';
 
                     let content = `<div class="season-badge ${seasonBadgeClass}">${info.label}</div>`;
                     content += `<div class="desc-text">${info.desc}</div>`;
@@ -285,7 +300,6 @@
             modal.classList.remove('show');
         }
 
-        // Закрытие окна по клику вне его
         document.addEventListener('click', (e) => {
             if (!modal.contains(e.target) && !e.target.classList.contains('day')) {
                 closeModal();
