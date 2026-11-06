@@ -75,9 +75,14 @@
 
         .day.empty { background-color: transparent; pointer-events: none; }
         
+        /* Убрано зачеркивание (text-decoration: line-through) */
         .day.disabled {
             background-color: rgba(150, 150, 150, 0.2); color: var(--hint-color);
-            cursor: not-allowed; text-decoration: line-through;
+            cursor: not-allowed;
+        }
+
+        .day.high.disabled {
+            background-color: var(--pink); color: #333;
         }
 
         .day.low { background-color: var(--green); color: white; }
@@ -200,24 +205,7 @@
         }
 
         function getDateInfo(dateStr) {
-            // Новое правило: если нет мест с 14.11 по 31.03 - это Высокий сезон
-            if (disabledDates.includes(dateStr)) {
-                if (dateStr >= '2026-11-14' && dateStr <= '2027-03-31') {
-                    return { 
-                        type: 'high', 
-                        label: 'Высокий сезон (Мест нет)', 
-                        desc: 'Все места выкуплены. Свидетельствует о максимальном спросе и загрузке курорта в этот период.',
-                        isEvent: false 
-                    };
-                } else {
-                    return { 
-                        type: 'disabled', 
-                        label: 'Нет мест', 
-                        desc: 'Бронирование закрыто или все места выкуплены.', 
-                        isEvent: false 
-                    };
-                }
-            }
+            const isDisabled = disabledDates.includes(dateStr);
             
             let season = { type: 'default', label: 'Нет данных', desc: 'Стандартный день' };
             for (let s of seasons) {
@@ -229,10 +217,39 @@
                 }
             }
 
+            if (isDisabled) {
+                if (season.type === 'red-date') {
+                    return {
+                        type: 'red-date', 
+                        label: 'Красные даты (Мест нет)', 
+                        desc: season.desc + ' ВНИМАНИЕ: Все места выкуплены.',
+                        isEvent: false,
+                        isDisabledStyle: false
+                    };
+                } else if (dateStr >= '2026-11-14' && dateStr <= '2027-03-31') {
+                    return { 
+                        type: 'high', 
+                        label: 'Высокий сезон (Мест нет)', 
+                        desc: 'Все места выкуплены. Свидетельствует о максимальном спросе и загрузке курорта в этот период.',
+                        isEvent: false,
+                        isDisabledStyle: true
+                    };
+                } else {
+                    return { 
+                        type: 'disabled', 
+                        label: 'Нет мест', 
+                        desc: 'Бронирование закрыто или все места выкуплены.', 
+                        isEvent: false,
+                        isDisabledStyle: true
+                    };
+                }
+            }
+
             const event = hiddenEvents[dateStr] || null;
             return {
                 type: season.type, label: season.label, desc: season.desc,
-                isEvent: !!event, eventTitle: event ? event.title : null, eventDesc: event ? event.desc : null
+                isEvent: !!event, eventTitle: event ? event.title : null, eventDesc: event ? event.desc : null,
+                isDisabledStyle: false
             };
         }
 
@@ -260,9 +277,7 @@
                 const info = getDateInfo(dateStr);
 
                 const dayDiv = document.createElement('div');
-                // Если тип high, но дата в disabledDates - оставляем визуально зачеркнутой
-                const isDisabled = disabledDates.includes(dateStr);
-                dayDiv.className = `day ${info.type} ${info.isEvent ? 'has-event' : ''} ${isDisabled ? 'disabled' : ''}`;
+                dayDiv.className = `day ${info.type} ${info.isEvent ? 'has-event' : ''} ${info.isDisabledStyle ? 'disabled' : ''}`;
                 dayDiv.textContent = d;
 
                 dayDiv.addEventListener('click', () => {
