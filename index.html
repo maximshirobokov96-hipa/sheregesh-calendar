@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Календарь Шерегеш</title>
+    <!-- Подключение Telegram Web App -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --red: #ff4d4d;
+            --pink: #ff99cc;
+            --yellow: #ffeb3b;
+            --green: #81c784;
+            --bg-color: var(--tg-theme-bg-color, #f4f7f6);
+            --text-color: var(--tg-theme-text-color, #333);
+            --hint-color: var(--tg-theme-hint-color, #7f8c8d);
+            --card-bg: var(--tg-theme-secondary-bg-color, #ffffff);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 { text-align: center; font-size: 1.2rem; margin: 10px 0 5px 0; color: var(--text-color); }
+        p.subtitle { text-align: center; font-size: 0.85rem; color: var(--hint-color); margin: 0 0 15px 0; }
+
+        .legend {
+            display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;
+            justify-content: center; background: var(--card-bg);
+            padding: 10px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            width: 100%; box-sizing: border-box;
+        }
+
+        .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.75rem; }
+        .legend-color { width: 14px; height: 14px; border-radius: 3px; position: relative; }
+        
+        .legend-dot {
+            position: absolute; top: -2px; right: -2px; width: 6px; height: 6px;
+            background-color: var(--red); border-radius: 50%; border: 1px solid var(--card-bg);
+        }
+
+        .months-container {
+            display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 400px;
+        }
+
+        .month {
+            background: var(--card-bg); border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05); padding: 15px; width: 100%; box-sizing: border-box;
+        }
+
+        .month-title {
+            text-align: center; font-weight: bold; font-size: 1.1rem;
+            margin-bottom: 10px; color: var(--text-color);
+        }
+
+        .weekdays {
+            display: grid; grid-template-columns: repeat(7, 1fr);
+            text-align: center; font-weight: bold; color: var(--hint-color);
+            margin-bottom: 8px; font-size: 0.8rem;
+        }
+
+        .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+
+        .day {
+            aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+            border-radius: 6px; cursor: pointer; font-size: 0.85rem; position: relative; user-select: none;
+        }
+
+        .day.empty { background-color: transparent; pointer-events: none; }
+        
+        .day.disabled {
+            background-color: rgba(150, 150, 150, 0.2); color: var(--hint-color);
+            cursor: not-allowed; text-decoration: line-through;
+        }
+
+        .day.low { background-color: var(--green); color: white; }
+        .day.moderate { background-color: var(--yellow); color: #333; }
+        .day.high { background-color: var(--pink); color: #333; }
+        .day.red-date { background-color: var(--red); color: white; font-weight: bold; }
+        .day.default { background-color: rgba(150, 150, 150, 0.1); color: var(--text-color); }
+
+        /* Пульсация при клике */
+        .day:active { transform: scale(0.9); transition: transform 0.1s; }
+
+        .day.has-event::after {
+            content: ''; position: absolute; top: 2px; right: 2px; width: 6px; height: 6px;
+            background-color: var(--red); border-radius: 50%; border: 1px solid white;
+        }
+
+        /* Модальное окно (вместо тултипа для мобилок) */
+        #modal {
+            position: fixed; bottom: -100%; left: 0; right: 0;
+            background: var(--card-bg); color: var(--text-color);
+            border-radius: 20px 20px 0 0; padding: 20px;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
+            transition: bottom 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 100; max-width: 400px; margin: 0 auto;
+            box-sizing: border-box;
+        }
+
+        #modal.show { bottom: 0; }
+        
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .modal-title { font-size: 1.1rem; font-weight: bold; color: var(--tg-theme-link-color, #007aff); }
+        .close-btn { font-size: 1.5rem; cursor: pointer; color: var(--hint-color); line-height: 1; }
+        
+        .season-badge { display: inline-block; padding: 3px 8px; border-radius: 5px; font-size: 0.8rem; font-weight: bold; margin-bottom: 10px; color: #333; }
+        .badge-red { background: var(--red); color: white; }
+        .badge-pink { background: var(--pink); }
+        .badge-yellow { background: var(--yellow); }
+        .badge-green { background: var(--green); color: white; }
+
+        .desc-text { font-size: 0.9rem; line-height: 1.4; color: var(--hint-color); margin-bottom: 15px; }
+        
+        .event-block {
+            background: rgba(255, 77, 77, 0.1); border-left: 3px solid var(--red);
+            padding: 10px; border-radius: 5px; margin-top: 10px;
+        }
+        .event-title { font-weight: bold; font-size: 0.95rem; color: var(--text-color); margin-bottom: 5px; }
+        .event-desc { font-size: 0.85rem; color: var(--hint-color); }
+    </style>
+</head>
+<body>
+
+    <h1>Сезоны Шерегеш 2026–2027</h1>
+    <p class="subtitle">Нажмите на дату для подробностей</p>
+
+    <div class="legend">
+        <div class="legend-item"><div class="legend-color" style="background: var(--red);"></div> Праздники</div>
+        <div class="legend-item"><div class="legend-color" style="background: var(--pink);"></div> Высокий</div>
+        <div class="legend-item"><div class="legend-color" style="background: var(--yellow);"></div> Умеренный</div>
+        <div class="legend-item"><div class="legend-color" style="background: var(--green);"></div> Низкий</div>
+        <div class="legend-item"><div class="legend-color" style="background: rgba(150,150,150,0.1);"><div class="legend-dot"></div></div> Событие</div>
+    </div>
+
+    <div class="months-container" id="calendar-container"></div>
+
+    <!-- Модальное окно для мобильных устройств -->
+    <div id="modal">
+        <div class="modal-header">
+            <div class="modal-title" id="modal-title">Дата</div>
+            <div class="close-btn" onclick="closeModal()">&times;</div>
+        </div>
+        <div id="modal-content"></div>
+    </div>
+
+    <script>
+        // Инициализация Telegram Web App
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Развернуть на весь экран
+        tg.ready();  // Сообщить Telegram, что приложение готово
+        // Установить цвет хедера (опционально)
+        tg.setHeaderColor('secondary_bg_color');
+
+        const seasons = [
+            { start: '2026-11-06', end: '2026-11-07', type: 'red-date', label: 'Красные даты', desc: 'Длинные выходные (День народного единства), открытие сезона.' },
+            { start: '2026-11-12', end: '2026-11-19', type: 'low', label: 'Низкий сезон', desc: 'Межсезонье, старт работы курорта.' },
+            { start: '2026-11-20', end: '2026-12-10', type: 'moderate', label: 'Умеренный сезон', desc: 'Стабильный период перед зимним всплеском.' },
+            { start: '2026-12-11', end: '2026-12-30', type: 'high', label: 'Высокий сезон', desc: 'Предновогодняя подготовка. Рост спроса по выходным.' },
+            { start: '2026-12-31', end: '2027-01-13', type: 'red-date', label: 'Красные даты', desc: 'Новогодние праздники. Абсолютный пик сезона.' },
+            { start: '2027-01-14', end: '2027-01-31', type: 'moderate', label: 'Умеренный сезон', desc: 'Спад после новогодних каникул.' },
+            { start: '2027-02-01', end: '2027-02-28', type: 'high', label: 'Высокий сезон', desc: 'Школьные каникулы и длинные выходные.' },
+            { start: '2027-02-23', end: '2027-02-23', type: 'red-date', label: 'Красные даты', desc: 'День защитника Отечества.' },
+            { start: '2027-03-01', end: '2027-03-12', type: 'moderate', label: 'Умеренный сезон', desc: 'Межпраздничный период.' },
+            { start: '2027-03-08', end: '2027-03-08', type: 'red-date', label: 'Красные даты', desc: 'Международный женский день.' },
+            { start: '2027-03-13', end: '2027-03-13', type: 'high', label: 'Высокий сезон', desc: 'Праздничные выходные (перенос 8 марта).' },
+            { start: '2027-03-14', end: '2027-04-04', type: 'moderate', label: 'Умеренный сезон', desc: 'Постепенное снижение спроса.' },
+            { start: '2027-04-05', end: '2027-04-15', type: 'low', label: 'Низкий сезон', desc: 'Закрытие сезона.' }
+        ];
+
+        const hiddenEvents = {
+            '2026-11-28': { title: 'День матери', desc: 'Семейный праздник. Приток семейных пар.' },
+            '2026-12-12': { title: 'День горнолыжника', desc: 'Неофициальный праздник. Тусовки на склонах.' },
+            '2027-01-17': { title: 'Всемирный день снега', desc: 'Праздник зимних видов спорта.' },
+            '2027-02-08': { title: 'День лыжника', desc: 'Профессиональный праздник.' },
+            '2027-02-14': { title: 'День всех влюбленных', desc: 'Романтический ажиотаж.' },
+            '2027-02-21': { title: 'День отца (локально)', desc: 'Семейный выезд на выходные.' }
+        };
+
+        const disabledDates = ['2026-11-01', '2026-11-06', '2026-11-07', '2026-11-12', '2026-11-13', '2026-12-31', '2027-01-06', '2027-02-21', '2027-02-22', '2027-04-25', '2027-04-26', '2027-04-27', '2027-04-28', '2027-04-29', '2027-04-30'];
+
+        const monthsToShow = [
+            { year: 2026, month: 10, name: 'Ноябрь 2026' },
+            { year: 2026, month: 11, name: 'Декабрь 2026' },
+            { year: 2027, month: 0, name: 'Январь 2027' },
+            { year: 2027, month: 1, name: 'Февраль 2027' },
+            { year: 2027, month: 2, name: 'Март 2027' },
+            { year: 2027, month: 3, name: 'Апрель 2027' }
+        ];
+
+        const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+        function formatDate(year, month, day) {
+            const d = new Date(year, month, day);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        function getDateInfo(dateStr) {
+            if (disabledDates.includes(dateStr)) return { type: 'disabled', label: 'Нет мест', desc: 'Все места выкуплены.', isEvent: false };
+            
+            let season = { type: 'default', label: 'Нет данных', desc: 'Стандартный день' };
+            for (let s of seasons) {
+                if (s.type === 'red-date' && dateStr >= s.start && dateStr <= s.end) { season = s; break; }
+            }
+            if (season.type === 'default') {
+                for (let s of seasons) {
+                    if (dateStr >= s.start && dateStr <= s.end) { season = s; break; }
+                }
+            }
+
+            const event = hiddenEvents[dateStr] || null;
+            return {
+                type: season.type, label: season.label, desc: season.desc,
+                isEvent: !!event, eventTitle: event ? event.title : null, eventDesc: event ? event.desc : null
+            };
+        }
+
+        const container = document.getElementById('calendar-container');
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalContent = document.getElementById('modal-content');
+
+        // Генерация календаря
+        monthsToShow.forEach(m => {
+            const monthDiv = document.createElement('div');
+            monthDiv.className = 'month';
+            monthDiv.innerHTML = `<div class="month-title">${m.name}</div><div class="weekdays">${weekdays.map(w => `<span>${w}</span>`).join('')}</div>`;
+            const daysDiv = document.createElement('div');
+            daysDiv.className = 'days';
+
+            let firstDay = new Date(m.year, m.month, 1).getDay();
+            let offset = firstDay === 0 ? 6 : firstDay - 1;
+
+            for (let i = 0; i < offset; i++) daysDiv.innerHTML += `<div class="day empty"></div>`;
+
+            const daysInMonth = new Date(m.year, m.month + 1, 0).getDate();
+            
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateStr = formatDate(m.year, m.month, d);
+                const info = getDateInfo(dateStr);
+
+                const dayDiv = document.createElement('div');
+                dayDiv.className = `day ${info.type} ${info.isEvent ? 'has-event' : ''}`;
+                dayDiv.textContent = d;
+
+                dayDiv.addEventListener('click', () => {
+                    if (info.type === 'empty') return;
+
+                    let seasonBadgeClass = 'badge-yellow';
+                    if (info.type === 'red-date') seasonBadgeClass = 'badge-red';
+                    if (info.type === 'high') seasonBadgeClass = 'badge-pink';
+                    if (info.type === 'low') seasonBadgeClass = 'badge-green';
+
+                    let content = `<div class="season-badge ${seasonBadgeClass}">${info.label}</div>`;
+                    content += `<div class="desc-text">${info.desc}</div>`;
+
+                    if (info.isEvent) {
+                        content += `<div class="event-block">
+                            <div class="event-title">✨ ${info.eventTitle}</div>
+                            <div class="event-desc">${info.eventDesc}</div>
+                        </div>`;
+                    }
+
+                    modalTitle.textContent = `${d} ${m.name.split(' ')[0]}`;
+                    modalContent.innerHTML = content;
+                    modal.classList.add('show');
+                });
+
+                daysDiv.appendChild(dayDiv);
+            }
+
+            monthDiv.appendChild(daysDiv);
+            container.appendChild(monthDiv);
+        });
+
+        function closeModal() {
+            modal.classList.remove('show');
+        }
+
+        // Закрытие окна по клику вне его
+        document.addEventListener('click', (e) => {
+            if (!modal.contains(e.target) && !e.target.classList.contains('day')) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>
